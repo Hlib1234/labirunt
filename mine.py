@@ -42,6 +42,7 @@ else:
     finish_img.fill((255, 215, 0))
     pygame.draw.rect(finish_img, (255, 0, 0), (0, 0, 80, 50), 5)
 
+
 # Клас гравця
 class Player:
     def __init__(self, x, y):
@@ -119,117 +120,122 @@ def generate_maze():
     return maze
 
 
-# Перетворення лабіринту на список стін
-def maze_to_walls(maze):
+# Функція для створення нової гри
+def new_game():
+    maze = generate_maze()
     walls = []
     for r in range(rows):
         for c in range(cols):
             if maze[r][c] == 1:
                 walls.append(pygame.Rect(c * cell_size, r * cell_size, cell_size, cell_size))
-    return walls
+
+    free_cells = [(r, c) for r in range(rows) for c in range(cols) if maze[r][c] == 0]
+
+    spawn_r, spawn_c = random.choice(free_cells)
+
+    # Фініш на краях
+    def get_edge_finish_cell():
+        edge_cells = []
+        for c in range(cols):
+            if maze[0][c] == 0:
+                edge_cells.append((0, c))
+            if maze[rows - 1][c] == 0:
+                edge_cells.append((rows - 1, c))
+        for r in range(rows):
+            if maze[r][0] == 0:
+                edge_cells.append((r, 0))
+            if maze[r][cols - 1] == 0:
+                edge_cells.append((r, cols - 1))
+        if not edge_cells:
+            return (0, 0)
+        return random.choice(edge_cells)
+
+    finish_r, finish_c = get_edge_finish_cell()
+    while (spawn_r, spawn_c) == (finish_r, finish_c):
+        finish_r, finish_c = get_edge_finish_cell()
+
+    spawn_x = spawn_c * cell_size
+    spawn_y = spawn_r * cell_size
+    finish_rect = pygame.Rect(finish_c * cell_size + 5, finish_r * cell_size + 5, 30, 30)
+
+    return walls, spawn_x, spawn_y, finish_rect
 
 
-# Фініш на краях карти
-def get_edge_finish_cell(maze):
-    edge_cells = []
-    for c in range(cols):
-        if maze[0][c] == 0:
-            edge_cells.append((0, c))
-        if maze[rows - 1][c] == 0:
-            edge_cells.append((rows - 1, c))
-    for r in range(rows):
-        if maze[r][0] == 0:
-            edge_cells.append((r, 0))
-        if maze[r][cols - 1] == 0:
-            edge_cells.append((r, cols - 1))
-    if not edge_cells:
-        return (0, 0)
-    return random.choice(edge_cells)
+# --- Основний ігровий цикл ---
+def main():
+    walls, spawn_x, spawn_y, finish_rect = new_game()
+    player = Player(spawn_x, spawn_y)
+    clock = pygame.time.Clock()
+
+    total_time = 30
+    start_ticks = pygame.time.get_ticks()
+
+    running = True
+    game_over = False
+    lost = False
+
+    while running:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                return
+            if e.type == pygame.KEYDOWN and (game_over or lost):
+                if e.key == pygame.K_ESCAPE:  # ⬅ Замінили Q на ESC
+                    main()  # 🔁 Перезапуск гри
+                    return
+
+        if not game_over and not lost:
+            keys = pygame.key.get_pressed()
+            player.move(keys, walls)
+
+            # Перевірка фінішу
+            if player.rect.colliderect(finish_rect):
+                game_over = True
+
+            # Перевірка часу
+            seconds = (pygame.time.get_ticks() - start_ticks) / 1000
+            time_left = max(0, int(total_time - seconds))
+            if time_left <= 0:
+                lost = True
+
+            # Малювання
+            screen.fill(BLACK)
+            for wall in walls:
+                pygame.draw.rect(screen, GREEN, wall)
+
+            screen.blit(finish_img, (finish_rect.x - 20, finish_rect.y - 10))
+            player.draw(screen)
+
+            # Таймер
+            font = pygame.font.Font(None, 40)
+            minutes = time_left // 60
+            seconds = time_left % 60
+            timer_text = font.render(f"{minutes:02}:{seconds:02}", True, WHITE)
+            screen.blit(timer_text, (screen_width - 120, 20))
+
+        elif game_over:
+            screen.fill(BLACK)
+            font = pygame.font.Font(None, 80)
+            text = font.render("🎉 ТИ ПЕРЕМІГ! 🎉", True, (255, 215, 0))
+            screen.blit(text, (screen_width // 2 - text.get_width() // 2, screen_height // 2 - 50))
+
+            font_small = pygame.font.Font(None, 40)
+            tip = font_small.render("Натисни ESC, щоб перезапустити", True, WHITE)
+            screen.blit(tip, (screen_width // 2 - tip.get_width() // 2, screen_height // 2 + 40))
+
+        elif lost:
+            screen.fill(BLACK)
+            font = pygame.font.Font(None, 80)
+            text = font.render("⌛ ТИ ПРОГРАВ!", True, RED)
+            screen.blit(text, (screen_width // 2 - text.get_width() // 2, screen_height // 2 - 50))
+
+            font_small = pygame.font.Font(None, 40)
+            tip = font_small.render("Натисни ESC, щоб спробувати ще раз", True, WHITE)
+            screen.blit(tip, (screen_width // 2 - tip.get_width() // 2, screen_height // 2 + 40))
+
+        pygame.display.flip()
+        clock.tick(60)
 
 
-# Створення лабіринту
-maze = generate_maze()
-walls = maze_to_walls(maze)
-
-# Вільні клітинки
-free_cells = [(r, c) for r in range(rows) for c in range(cols) if maze[r][c] == 0]
-
-# Випадковий спавн і фініш
-spawn_r, spawn_c = random.choice(free_cells)
-finish_r, finish_c = get_edge_finish_cell(maze)
-
-# Якщо співпали — міняємо фініш
-while (spawn_r, spawn_c) == (finish_r, finish_c):
-    finish_r, finish_c = get_edge_finish_cell(maze)
-
-# Координати
-spawn_x = spawn_c * cell_size
-spawn_y = spawn_r * cell_size
-finish_rect = pygame.Rect(finish_c * cell_size + 5, finish_r * cell_size + 5, 30, 30)
-
-# Гравець
-player = Player(spawn_x, spawn_y)
-clock = pygame.time.Clock()
-
-# Таймер
-total_time = 180  # 3 хвилини = 180 секунд
-start_ticks = pygame.time.get_ticks()  # час початку гри
-
-running = True
-game_over = False
-lost = False
-
-# Основний цикл
-while running:
-    for e in pygame.event.get():
-        if e.type == pygame.QUIT:
-            running = False
-
-    if not game_over and not lost:
-        keys = pygame.key.get_pressed()
-        player.move(keys, walls)
-
-        # Перевірка фінішу
-        if player.rect.colliderect(finish_rect):
-            game_over = True
-
-        # Перевірка часу
-        seconds = (pygame.time.get_ticks() - start_ticks) / 1000  # у секундах
-        time_left = max(0, int(total_time - seconds))
-        if time_left <= 0:
-            lost = True
-
-        # Малювання
-        screen.fill(BLACK)
-        for wall in walls:
-            pygame.draw.rect(screen, GREEN, wall)
-
-        # Фініш
-        screen.blit(finish_img, (finish_rect.x - 20, finish_rect.y - 10))
-        player.draw(screen)
-
-        # Таймер у правому верхньому кутку
-        font = pygame.font.Font(None, 40)
-        minutes = time_left // 60
-        seconds = time_left % 60
-        timer_text = font.render(f"{minutes:02}:{seconds:02}", True, WHITE)
-        screen.blit(timer_text, (screen_width - 120, 20))
-
-    elif game_over:
-        # Перемога
-        screen.fill(BLACK)
-        font = pygame.font.Font(None, 80)
-        text = font.render("🎉 ТИ ПЕРЕМІГ! 🎉", True, (255, 215, 0))
-        screen.blit(text, (screen_width // 2 - text.get_width() // 2, screen_height // 2 - 50))
-
-    elif lost:
-        # Програш
-        screen.fill(BLACK)
-        font = pygame.font.Font(None, 80)
-        text = font.render("⌛ ТИ ПРОГРАВ!", True, RED)
-        screen.blit(text, (screen_width // 2 - text.get_width() // 2, screen_height // 2 - 50))
-
-    pygame.display.flip()
-    clock.tick(60)
-
-pygame.quit()
+# Запуск гри
+main()
